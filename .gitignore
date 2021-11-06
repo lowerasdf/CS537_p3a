@@ -1,1 +1,4 @@
 pzip
+tests/*
+*.txt
+out/*
