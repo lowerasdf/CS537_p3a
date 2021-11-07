@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <sys/sysinfo.h>
 #include <pthread.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define MAX_BUFFER_SIZE 100000
 
@@ -13,10 +17,13 @@ int q_tail_idx = 0;
 int q_size = 0;
 int q_capacity;
 
+int is_production_done = 0;
+
 struct buffer {
     char *value;
     int index;
     int size;
+    int file_no;
 };
 
 struct data {
@@ -45,12 +52,32 @@ struct buffer pop() {
 }
 
 void *producer(void *arg) {
-    // TODO mmap()
+    char **files = (char **) arg;
+
+    for(int i = 0; i < n_files; i++) {
+        int f = open(files[i], O_RDONLY);
+        if (f < 0) {
+            continue;
+        }
+
+        struct stat file_stat;
+        if (fstat(f, &file_stat) || file_stat.st_size == 0) {
+            continue;
+        }
+
+        printf("file size: %ld\n", file_stat.st_size);
+    }
+
+    pthread_mutex_lock(&lock);
+    is_production_done = 1;
+    pthread_mutex_unlock(&lock);
 }
 
 void *consumer(void *arg) {
     // TODO consume
     // TODO also wake printer when done
+
+    
 }
 
 void *printer(void *args) {
@@ -69,7 +96,7 @@ int main(int argc, char *argv[])
     q_capacity = n_threads;
 
     queue = malloc(n_threads * sizeof(struct buffer));
-    results = malloc(n_files * sizeof(struct data));
+    results = malloc(n_files * sizeof(struct *data));
 
     pthread_t pid, cid[n_threads], printid;
 	pthread_create(&pid, NULL, producer, argv + 1);
