@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/sysinfo.h>
+#include <pthread.h>
 
 #define MAX_BUFFER_SIZE 100000
 
@@ -10,6 +11,7 @@ int n_files;
 int q_head_idx = 0;
 int q_tail_idx = 0;
 int q_size = 0;
+int q_capacity;
 
 struct buffer {
     char *value;
@@ -25,6 +27,23 @@ struct data {
 struct buffer *queue;
 struct data *results;
 
+pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
+pthread_cond_t fill = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+void push(struct buffer buff) {
+    queue[q_head_idx] = buff;
+    q_head_idx = (q_head_idx + 1) % q_capacity;
+    q_size++;
+}
+
+struct buffer pop() {
+    struct buffer buff = queue[q_tail_idx];
+	q_tail_idx = (q_tail_idx + 1) % q_capacity;
+  	q_size--;
+  	return buff;
+}
+
 int main(int argc, char *argv[])
 {
     if (argc == 1) {
@@ -34,6 +53,7 @@ int main(int argc, char *argv[])
 
     n_threads = get_nprocs();
     n_files = argc - 1;
+    q_capacity = n_threads;
 
     queue = malloc(n_threads * sizeof(struct buffer));
     results = malloc(n_files * sizeof(struct data));
@@ -75,7 +95,11 @@ int main(int argc, char *argv[])
         fwrite(&prev, 1, 1, stdout);
     }
 
+    // TODO printing thread
+
     // TODO free inside
+
+    // TODO wait
 
     free(queue);
     free(results);
