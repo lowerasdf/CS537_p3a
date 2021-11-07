@@ -44,6 +44,19 @@ struct buffer pop() {
   	return buff;
 }
 
+void *producer(void *arg) {
+    // TODO mmap()
+}
+
+void *consumer(void *arg) {
+    // TODO consume
+    // TODO also wake printer when done
+}
+
+void *printer(void *args) {
+    // TODO 1 thread, print when results[ticket] is not null, otherwise sleep
+}
+
 int main(int argc, char *argv[])
 {
     if (argc == 1) {
@@ -58,42 +71,55 @@ int main(int argc, char *argv[])
     queue = malloc(n_threads * sizeof(struct buffer));
     results = malloc(n_files * sizeof(struct data));
 
-    // TODO create pthread for 1 producer and n_threads consumers
+    pthread_t pid, cid[n_threads], printid;
+	pthread_create(&pid, NULL, producer, argv + 1);
+
+	for (int i = 0; i < n_threads; i++) {
+        pthread_create(&cid[i], NULL, consumer, NULL);
+    }
+
+    pthread_create(&printid, NULL, printer, NULL);
+
+    pthread_join(pid, NULL);
+    for (int i = 0; i < n_threads; i++) {
+        pthread_join(cid[i], NULL);
+    }
+    pthread_join(printid, NULL);
 
     // TODO do mmap in producer, parse in consumer, print output after join
-    char curr;
-    char prev;
-    int count = 1;
-    for(int i = 1; i < argc; i++) {
-        FILE *f = fopen(argv[i], "r");
-        if(f == NULL) {
-            continue;
-        }
+    // char curr;
+    // char prev;
+    // int count = 1;
+    // for(int i = 1; i < argc; i++) {
+    //     FILE *f = fopen(argv[i], "r");
+    //     if(f == NULL) {
+    //         continue;
+    //     }
 
-        if (prev == '\0') {
-            prev = fgetc(f);
-        }
+    //     if (prev == '\0') {
+    //         prev = fgetc(f);
+    //     }
 
-        while ((curr = fgetc(f)) != EOF) {
-            if (curr == '\0') {
-                continue;
-            } else if (curr == prev) {
-                count += 1;
-            } else {
-                fwrite(&count, 4, 1, stdout);
-                fwrite(&prev, 1, 1, stdout);
-                count = 1;
-                prev = curr;
-            }
-        }
+    //     while ((curr = fgetc(f)) != EOF) {
+    //         if (curr == '\0') {
+    //             continue;
+    //         } else if (curr == prev) {
+    //             count += 1;
+    //         } else {
+    //             fwrite(&count, 4, 1, stdout);
+    //             fwrite(&prev, 1, 1, stdout);
+    //             count = 1;
+    //             prev = curr;
+    //         }
+    //     }
 
-        fclose(f);
-    }
+    //     fclose(f);
+    // }
     
-    if (prev != '\0') {
-        fwrite(&count, 4, 1, stdout);
-        fwrite(&prev, 1, 1, stdout);
-    }
+    // if (prev != '\0') {
+    //     fwrite(&count, 4, 1, stdout);
+    //     fwrite(&prev, 1, 1, stdout);
+    // }
 
     // TODO printing thread
 
