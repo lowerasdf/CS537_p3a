@@ -41,8 +41,10 @@ struct buffer terminating_buffer = {.size = -1};
 
 pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
 pthread_cond_t fill = PTHREAD_COND_INITIALIZER;
-pthread_cond_t printer_cv = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_cond_t printer_cv = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t printer_lock = PTHREAD_MUTEX_INITIALIZER;
 
 void push(struct buffer *buff) {
     queue[q_head_idx] = *buff;
@@ -85,7 +87,9 @@ void *producer(void *arg) {
         }
 
         // for(int i = 0; i < file_stat.st_size; i++) {
-        //     printf("map: %c\n", map[i]);
+        //     if (map[i]) {
+        //         printf("map: %c\n", map[i]);
+        //     }
         // }
 
         for(int j = 0; j < n_pages; j++) {
@@ -195,6 +199,7 @@ void *consumer(void *arg) {
         pthread_mutex_unlock(&lock);
 
         results[buff.file_no][buff.index] = consume(&buff);
+        pthread_cond_signal(&printer_cv);
         // munmap(buff.value, buff.size);
     } while (buff.size != terminating_buffer.size);
 
@@ -202,15 +207,41 @@ void *consumer(void *arg) {
 }
 
 void *printer(void *args) {
-    // int ticket = 0;
+    for (int i = 0; i < n_files; i++) {
+        while (results[i] == NULL || (i < n_files - 1 && results[i+1] == NULL)) {
+            pthread_cond_wait(&printer_cv, &printer_lock);
+        }
 
+        int buff_size = num_buffer_per_file[i];
+        for (int j = 0; j < buff_size; j++) {
+            while (results[i][j] == NULL || (j < buff_size - 1 && results[i][j+1] == NULL)) {
+                pthread_cond_wait(&printer_cv, &printer_lock);
+            }
+
+            int count_size = results[i][j].size;
+            if (i < n_files - 1 && j == buff_size - 1 && results[i][buff_size - 1].keyword[count_size - 1] == results[i+1][0].keyword[0]) {
+                results[i+1][0].count[0] += results[i][buff_size - 1].count[count_size - 1];
+                count_size--;
+            } else if (j < buff_size - 1 && results[i][j].keyword[count_size - 1] == results[i][j+1].keyword[0]) {
+                results[i][j+1].count[0] += results[i][j].count[count_size - 1];
+                count_size--;
+            }
+
+            for(int k = 0; k < count_size; k++) {
+                
+                printf("%d%c\n", results[i][j].count[k], results[i][j].keyword[k]);
+                // fwrite(&results[i][j].count[k], 4, 1, stdout);
+                // fwrite(&results[i][j].keyword[k], 1, 1, stdout);
+            }
+        }
+    }
 
     return 0;
 }
 
 void print() {
     // FILE *f = fopen("out.txt", "w+");
-
+    // char *temp = malloc(n_files * MAX_BUFFER_SIZE * (sizeof(int)+sizeof(char)));
     for (int i = 0; i < n_files; i++) {
         if (results[i] != NULL) {
             int buff_size = num_buffer_per_file[i];
@@ -268,11 +299,28 @@ int main(int argc, char *argv[])
     for (int i = 0; i < n_threads; i++) {
         pthread_join(cid[i], NULL);
     }
+
+    pthread_cond_broadcast(&printer_cv);
     pthread_join(printid, NULL);
 
     // clock_t end = clock();
     // float seconds = ((float)(end - start)) / CLOCKS_PER_SEC;
     // printf("thread time:%f s\n", seconds);
+
+    // start = clock();
+    // print();
+    // end = clock();
+    // seconds = ((float)(end - start)) / CLOCKS_PER_SEC;
+    // printf("print time:%f s\n", seconds);
+
+    free(queue);
+    for(int i = 0; i < n_files; i++) {
+        if (results[i] != NULL) {
+            free(results[i]);
+        }
+    }
+    free(results);
+    free(num_buffer_per_file);
 
     // for (int i = 0; i < 4; i++) {
     //     struct buffer test = pop();
@@ -296,19 +344,4 @@ int main(int argc, char *argv[])
     //         results[i][j].size = 3;
     //     }
     // }
-
-    // start = clock();
-    print();
-    // end = clock();
-    // seconds = ((float)(end - start)) / CLOCKS_PER_SEC;
-    // printf("print time:%f s\n", seconds);
-
-    free(queue);
-    for(int i = 0; i < n_files; i++) {
-        if (results[i] != NULL) {
-            free(results[i]);
-        }
-    }
-    free(results);
-    free(num_buffer_per_file);
 }
