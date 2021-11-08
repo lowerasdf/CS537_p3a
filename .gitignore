@@ -2,3 +2,4 @@ pzip
 tests/*
 *.txt
 out/*
+bigDiffFile

@@ -7,8 +7,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+// #include <time.h>
 
-#define MAX_BUFFER_SIZE 10
+#define MAX_BUFFER_SIZE 1000000
 
 int n_threads;
 int n_files;
@@ -17,8 +18,6 @@ int q_head_idx = 0;
 int q_tail_idx = 0;
 int q_size = 0;
 int q_capacity;
-
-int is_production_done = 0;
 
 struct buffer {
     char *value;
@@ -37,6 +36,8 @@ int *num_buffer_per_file;
 
 struct buffer *queue;
 struct data **results;
+
+struct buffer terminating_buffer = {.size = -1};
 
 pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
 pthread_cond_t fill = PTHREAD_COND_INITIALIZER;
@@ -75,12 +76,17 @@ void *producer(void *arg) {
         results[i] = malloc(n_pages * sizeof(struct data));
         num_buffer_per_file[i] = n_pages;
 
+        // printf("file_stat.st_size:%ld\n", file_stat.st_size);
         char *map = mmap(NULL, file_stat.st_size, PROT_READ, MAP_SHARED, f, 0);
         if (map == MAP_FAILED) {
             printf("mmap() failed\n");
             close(f);
             exit(1);
         }
+
+        // for(int i = 0; i < file_stat.st_size; i++) {
+        //     printf("map: %c\n", map[i]);
+        // }
 
         for(int j = 0; j < n_pages; j++) {
             pthread_mutex_lock(&lock);
@@ -92,8 +98,10 @@ void *producer(void *arg) {
             if (j == n_pages - 1) {
                 buff_size = remainder_size;
             }
-
             push(&(struct buffer){.value=map, .index=j, .size=buff_size, .file_no=i});
+            
+            map += MAX_BUFFER_SIZE;
+
             pthread_cond_signal(&fill);
             pthread_mutex_unlock(&lock);
         }
@@ -101,9 +109,15 @@ void *producer(void *arg) {
         close(f);
     }
 
-    pthread_mutex_lock(&lock);
-    is_production_done = 1;
-    pthread_mutex_unlock(&lock);
+    for (int i = 0; i < n_threads; i++) {
+        pthread_mutex_lock(&lock);
+        while (q_size == q_capacity) {
+            pthread_cond_wait(&empty, &lock);
+        } 
+        push(&terminating_buffer);
+        pthread_cond_signal(&fill);
+        pthread_mutex_unlock(&lock);
+    }
 
     return 0;
 }
@@ -112,11 +126,12 @@ struct data consume(struct buffer *buff) {
     struct data result;
     int size = 0;
     char *keywords = malloc(buff->size * sizeof(char));
-    char *counts = malloc(buff->size * sizeof(int));
+    int *counts = malloc(buff->size * sizeof(int));
     
     char prev = buff->value[0];
     char curr = buff->value[0];
     int count = 1;
+
     for (int i = 1; i < buff->size; i++) {
         curr = buff->value[i];
         if (curr == '\0') {
@@ -138,39 +153,50 @@ struct data consume(struct buffer *buff) {
         size += 1;
     }
 
-    printf("size: %d\n", size);
-    for (int i = 0; i < size; i++) {
-        printf("%d%c\n", counts[i], keywords[i]);
-    }
-
-    result.keyword = realloc(keywords, size);
-    result.count = realloc(counts, size);
+    result.keyword = realloc(keywords, size * sizeof(char));
+    result.count = realloc(counts, size * sizeof(int));
     result.size = size;
+    
+    // for (int i = 1; i < buff->size; i++) {
+    //     if (result.keyword[i] == '\n') {
+    //         printf("%d, NEWLINE\n", i);
+    //     } else {
+    //         printf("%d, %c\n", i, buff->value[i]);
+    //     }
+    // }
+
+    // pthread_mutex_lock(&lock);
+    // printf("size: %d\n", result.size);
+    // for (int i = 0; i < result.size; i++) {
+    //     printf("%d%c\n", result.count[i], result.keyword[i]);
+    // }
+    // pthread_mutex_unlock(&lock);
+
     return result;
 }
 
 // TODO run munmap(*ptr, size) when done
 void *consumer(void *arg) {
-    while (is_production_done == 0 || q_size != 0) {
+    struct buffer buff;
+    do {
         pthread_mutex_lock(&lock);
         while (q_size == 0) {
             pthread_cond_wait(&fill, &lock);
         }
 
-        if (is_production_done) {
+        buff = pop();
+        // printf("consuming: %d, %d, %d\n", buff.size, buff.index, buff.file_no);
+        if (buff.size == terminating_buffer.size) {
             pthread_mutex_unlock(&lock);
             return 0;
         }
-
-        struct buffer buff = pop();
-        // printf("consuming: %d, %d, %d\n", buff.size, buff.index, buff.file_no);
 
         pthread_cond_signal(&empty);
         pthread_mutex_unlock(&lock);
 
         results[buff.file_no][buff.index] = consume(&buff);
-        munmap(buff.value, buff.size);
-    }
+        // munmap(buff.value, buff.size);
+    } while (buff.size != terminating_buffer.size);
 
     return 0;
 }
@@ -183,6 +209,8 @@ void *printer(void *args) {
 }
 
 void print() {
+    // FILE *f = fopen("out.txt", "w+");
+
     for (int i = 0; i < n_files; i++) {
         if (results[i] != NULL) {
             int buff_size = num_buffer_per_file[i];
@@ -191,16 +219,23 @@ void print() {
                 if (i < n_files - 1 && j == buff_size - 1 && results[i][buff_size - 1].keyword[count_size - 1] == results[i+1][0].keyword[0]) {
                     results[i+1][0].count[0] += results[i][buff_size - 1].count[count_size - 1];
                     count_size--;
+                } else if (j < buff_size - 1 && results[i][j].keyword[count_size - 1] == results[i][j+1].keyword[0]) {
+                    results[i][j+1].count[0] += results[i][j].count[count_size - 1];
+                    count_size--;
                 }
 
                 for(int k = 0; k < count_size; k++) {
                     printf("%d%c\n", results[i][j].count[k], results[i][j].keyword[k]);
                     // fwrite(&results[i][j].count[k], 4, 1, stdout);
                     // fwrite(&results[i][j].keyword[k], 1, 1, stdout);
+                    // fwrite(&results[i][j].count[k], 4, 1, f);
+                    // fwrite(&results[i][j].keyword[k], 1, 1, f);
                 }
             }
         }
     }
+
+    // fclose(f);
 }
 
 int main(int argc, char *argv[])
@@ -218,6 +253,8 @@ int main(int argc, char *argv[])
     results = malloc(n_files * sizeof(struct data *));
     num_buffer_per_file = malloc(n_files * sizeof(int));
 
+    // clock_t start = clock();
+
     pthread_t pid, cid[n_threads], printid;
 	pthread_create(&pid, NULL, producer, argv + 1);
 
@@ -232,6 +269,10 @@ int main(int argc, char *argv[])
         pthread_join(cid[i], NULL);
     }
     pthread_join(printid, NULL);
+
+    // clock_t end = clock();
+    // float seconds = ((float)(end - start)) / CLOCKS_PER_SEC;
+    // printf("thread time:%f s\n", seconds);
 
     // for (int i = 0; i < 4; i++) {
     //     struct buffer test = pop();
@@ -255,7 +296,12 @@ int main(int argc, char *argv[])
     //         results[i][j].size = 3;
     //     }
     // }
+
+    // start = clock();
     print();
+    // end = clock();
+    // seconds = ((float)(end - start)) / CLOCKS_PER_SEC;
+    // printf("print time:%f s\n", seconds);
 
     free(queue);
     for(int i = 0; i < n_files; i++) {
@@ -265,10 +311,4 @@ int main(int argc, char *argv[])
     }
     free(results);
     free(num_buffer_per_file);
-
-    // TODO printing thread
-
-    // TODO free inside
-
-    // TODO wait
 }
