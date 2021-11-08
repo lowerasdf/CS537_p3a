@@ -108,10 +108,69 @@ void *producer(void *arg) {
     return 0;
 }
 
+struct data consume(struct buffer *buff) {
+    struct data result;
+    int size = 0;
+    char *keywords = malloc(buff->size * sizeof(char));
+    char *counts = malloc(buff->size * sizeof(int));
+    
+    char prev = buff->value[0];
+    char curr = buff->value[0];
+    int count = 1;
+    for (int i = 1; i < buff->size; i++) {
+        curr = buff->value[i];
+        if (curr == '\0') {
+            continue;
+        } else if (curr == prev) {
+            count += 1;
+        } else {
+            keywords[size] = prev;
+            counts[size] = count;
+            count = 1;
+            prev = curr;
+            size += 1;
+        }
+    }
+    
+    if (buff->size > 0) {
+        keywords[size] = prev;
+        counts[size] = count;
+        size += 1;
+    }
+
+    printf("size: %d\n", size);
+    for (int i = 0; i < size; i++) {
+        printf("%d%c\n", counts[i], keywords[i]);
+    }
+
+    result.keyword = realloc(keywords, size);
+    result.count = realloc(counts, size);
+    result.size = size;
+    return result;
+}
+
 // TODO run munmap(*ptr, size) when done
 void *consumer(void *arg) {
-    // TODO consume
-    // TODO also wake printer when done
+    while (is_production_done == 0 || q_size != 0) {
+        pthread_mutex_lock(&lock);
+        while (q_size == 0) {
+            pthread_cond_wait(&fill, &lock);
+        }
+
+        if (is_production_done) {
+            pthread_mutex_unlock(&lock);
+            return 0;
+        }
+
+        struct buffer buff = pop();
+        // printf("consuming: %d, %d, %d\n", buff.size, buff.index, buff.file_no);
+
+        pthread_cond_signal(&empty);
+        pthread_mutex_unlock(&lock);
+
+        results[buff.file_no][buff.index] = consume(&buff);
+        munmap(buff.value, buff.size);
+    }
 
     return 0;
 }
@@ -126,20 +185,18 @@ void *printer(void *args) {
 void print() {
     for (int i = 0; i < n_files; i++) {
         if (results[i] != NULL) {
-            int buff_size = sizeof(results[i]) / sizeof(results[i][0]);
-            int last_count_size = sizeof(results[i][buff_size - 1].count) / sizeof(results[i][buff_size - 1].count[0]);
-            printf("printing buffsize=%ld\n", sizeof(results[i][0]));
-            if (i < n_files - 1 && results[i][buff_size - 1].keyword[last_count_size - 1] == results[i+1][0].keyword[0]) {
-                results[i+1][0].count[0] += results[i][buff_size - 1].count[last_count_size - 1];
-                buff_size--;
-            }
-
+            int buff_size = num_buffer_per_file[i];
             for (int j = 0; j < buff_size; j++) {
-                int count_size = sizeof(results[i][j].count) / sizeof(results[i][j].count[0]);
+                int count_size = results[i][j].size;
+                if (i < n_files - 1 && j == buff_size - 1 && results[i][buff_size - 1].keyword[count_size - 1] == results[i+1][0].keyword[0]) {
+                    results[i+1][0].count[0] += results[i][buff_size - 1].count[count_size - 1];
+                    count_size--;
+                }
+
                 for(int k = 0; k < count_size; k++) {
                     printf("%d%c\n", results[i][j].count[k], results[i][j].keyword[k]);
-                    fwrite(&results[i][j].count[k], 4, 1, stdout);
-                    fwrite(&results[i][j].keyword[k], 1, 1, stdout);
+                    // fwrite(&results[i][j].count[k], 4, 1, stdout);
+                    // fwrite(&results[i][j].keyword[k], 1, 1, stdout);
                 }
             }
         }
@@ -181,15 +238,24 @@ int main(int argc, char *argv[])
     //     printf("buffer at i=%d, index=%d, size=%d, file_no=%d\n", i, test.index, test.size, test.file_no);
     // }
 
-    // for (int i = 0; i < 1; i++) {
-    //     for (int j = 0; j < 4; j++) {
-    //         char keywords[3] = {'a', 'b', 'a'};
-    //         int counts[3] = {2, 3, 4};
+    // for (int i = 0; i < 2; i++) {
+    //     for (int j = 0; j < 1; j++) {
+    //         char *keywords = malloc(3 * sizeof(char));
+    //         keywords[0] = 'a';
+    //         keywords[1] = 'b';
+    //         keywords[2] = 'a';
+
+    //         int *counts = malloc(3 * sizeof(int));
+    //         counts[0] = 2;
+    //         counts[1] = 3;
+    //         counts[2] = 4;
+
     //         results[i][j].keyword = keywords;
     //         results[i][j].count = counts;
+    //         results[i][j].size = 3;
     //     }
     // }
-    // print();
+    print();
 
     free(queue);
     for(int i = 0; i < n_files; i++) {
@@ -199,41 +265,6 @@ int main(int argc, char *argv[])
     }
     free(results);
     free(num_buffer_per_file);
-
-    // TODO do mmap in producer, parse in consumer, print output after join
-    // char curr;
-    // char prev;
-    // int count = 1;
-    // for(int i = 1; i < argc; i++) {
-    //     FILE *f = fopen(argv[i], "r");
-    //     if(f == NULL) {
-    //         continue;
-    //     }
-
-    //     if (prev == '\0') {
-    //         prev = fgetc(f);
-    //     }
-
-    //     while ((curr = fgetc(f)) != EOF) {
-    //         if (curr == '\0') {
-    //             continue;
-    //         } else if (curr == prev) {
-    //             count += 1;
-    //         } else {
-    //             fwrite(&count, 4, 1, stdout);
-    //             fwrite(&prev, 1, 1, stdout);
-    //             count = 1;
-    //             prev = curr;
-    //         }
-    //     }
-
-    //     fclose(f);
-    // }
-    
-    // if (prev != '\0') {
-    //     fwrite(&count, 4, 1, stdout);
-    //     fwrite(&prev, 1, 1, stdout);
-    // }
 
     // TODO printing thread
 
