@@ -30,7 +30,10 @@ struct buffer {
 struct data {
     char *keyword;
     int *count;
+    int size;
 };
+
+int *num_buffer_per_file;
 
 struct buffer *queue;
 struct data **results;
@@ -70,6 +73,7 @@ void *producer(void *arg) {
         }
         
         results[i] = malloc(n_pages * sizeof(struct data));
+        num_buffer_per_file[i] = n_pages;
 
         char *map = mmap(NULL, file_stat.st_size, PROT_READ, MAP_SHARED, f, 0);
         if (map == MAP_FAILED) {
@@ -155,6 +159,7 @@ int main(int argc, char *argv[])
 
     queue = malloc(n_threads * sizeof(struct buffer));
     results = malloc(n_files * sizeof(struct data *));
+    num_buffer_per_file = malloc(n_files * sizeof(int));
 
     pthread_t pid, cid[n_threads], printid;
 	pthread_create(&pid, NULL, producer, argv + 1);
@@ -193,6 +198,7 @@ int main(int argc, char *argv[])
         }
     }
     free(results);
+    free(num_buffer_per_file);
 
     // TODO do mmap in producer, parse in consumer, print output after join
     // char curr;
