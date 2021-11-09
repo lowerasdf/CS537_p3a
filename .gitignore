@@ -4,3 +4,4 @@ tests/*
 out/*
 bigDiffFile
 a.out
+bigSameFile
