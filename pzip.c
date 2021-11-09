@@ -278,108 +278,107 @@ void print() {
     // }
 
     // APPROACH #2
-    struct data *prev = NULL;
-    for (int i = 0; i < n_files; i++) {
-        if (results[i] == NULL) {
-            continue;
-        }
-        int buff_size = num_buffer_per_file[i];
-        for (int j = 0; j < buff_size; j++) {
-            if (results[i][j] == NULL) {
-                continue;
-            }
-            if (prev != NULL && results[i][j]->keyword[0] == prev->keyword[prev->size - 1]) {
-                results[i][j]->count[0] += prev->count[prev->size - 1];
-                prev->size -= 1;
-            }
-            prev = results[i][j];
-        }
-    }
-
-    for (int i = 0; i < n_files; i++) {
-        if (results[i] == NULL) {
-            continue;
-        }
-        int buff_size = num_buffer_per_file[i];
-        for (int j = 0; j < buff_size; j++) {
-            if (results[i][j] == NULL) {
-                continue;
-            }
-            int count_size = results[i][j]->size;
-            for (int k = 0; k < count_size; k++) {
-                fwrite(&results[i][j]->count[k], 4, 1, stdout);
-                fwrite(&results[i][j]->keyword[k], 1, 1, stdout);
-            }
-        }
-    }
-
-    // APPROACH #1
-    // char prev_char = '\0';
-    // int prev_count = -1;
+    // struct data *prev = NULL;
     // for (int i = 0; i < n_files; i++) {
     //     if (results[i] == NULL) {
     //         continue;
     //     }
-
     //     int buff_size = num_buffer_per_file[i];
     //     for (int j = 0; j < buff_size; j++) {
     //         if (results[i][j] == NULL) {
     //             continue;
     //         }
+    //         if (prev != NULL && results[i][j]->keyword[0] == prev->keyword[prev->size - 1]) {
+    //             results[i][j]->count[0] += prev->count[prev->size - 1];
+    //             prev->size -= 1;
+    //         }
+    //         prev = results[i][j];
+    //     }
+    // }
 
+    // for (int i = 0; i < n_files; i++) {
+    //     if (results[i] == NULL) {
+    //         continue;
+    //     }
+    //     int buff_size = num_buffer_per_file[i];
+    //     for (int j = 0; j < buff_size; j++) {
+    //         if (results[i][j] == NULL) {
+    //             continue;
+    //         }
     //         int count_size = results[i][j]->size;
-    //         if (count_size == 1) {
-    //             if (prev_count != -1) {
-    //                 if (prev_char != results[i][j]->keyword[0]) {
-    //                     // flush prev
-    //                     // printf("%d%c\n", prev_count, prev_char);
-    //                     fwrite(&prev_count, 4, 1, stdout);
-    //                     fwrite(&prev_char, 1, 1, stdout);
-    //                     prev_char = results[i][j]->keyword[count_size - 1];
-    //                     prev_count = results[i][j]->count[count_size - 1];
-    //                 } else {
-    //                     prev_count += results[i][j]->count[count_size - 1];
-    //                 }
-    //             } else {
-    //                 prev_char = results[i][j]->keyword[count_size - 1];
-    //                 prev_count = results[i][j]->count[count_size - 1];
-    //             }
-    //         } else {
-    //             for(int k = 0; k < count_size - 1; k++) {
-    //                 if (prev_count != -1 && k == 0) {
-    //                     if (prev_char != results[i][j]->keyword[k]) {
-    //                         // flush prev
-    //                         // printf("%d%c\n", prev_count, prev_char);
-    //                         fwrite(&prev_count, 4, 1, stdout);
-    //                         fwrite(&prev_char, 1, 1, stdout);
-
-    //                         // print normal
-    //                         // printf("%d%c\n", results[i][j]->count[k], results[i][j]->keyword[k]);
-    //                         fwrite(&results[i][j]->count[k], 4, 1, stdout);
-    //                         fwrite(&results[i][j]->keyword[k], 1, 1, stdout);
-    //                     } else {
-    //                         // printf("%d%c\n", results[i][j]->count[k] + prev_count, results[i][j]->keyword[k]);
-    //                         fwrite(&results[i][j]->count[k], 4, 1, stdout);
-    //                         fwrite(&results[i][j]->keyword[k], 1, 1, stdout);
-    //                     }
-    //                 } else {
-    //                     // print normal
-    //                     // printf("%d%c\n", results[i][j]->count[k], results[i][j]->keyword[k]);
-    //                     fwrite(&results[i][j]->count[k], 4, 1, stdout);
-    //                     fwrite(&results[i][j]->keyword[k], 1, 1, stdout);
-    //                 }
-    //             }
-    //             prev_char = results[i][j]->keyword[count_size - 1];
-    //             prev_count = results[i][j]->count[count_size - 1];
+    //         for (int k = 0; k < count_size; k++) {
+    //             fwrite(&results[i][j]->count[k], 4, 1, stdout);
+    //             fwrite(&results[i][j]->keyword[k], 1, 1, stdout);
     //         }
     //     }
     // }
-    // if (prev_count != -1) {
-    //     // flush prev
-    //     // printf("%d%c\n", prev_count, prev_char);
-    //     fwrite(&prev_count, 4, 1, stdout);
-    //     fwrite(&prev_char, 1, 1, stdout);
-    // }
+
+    // APPROACH #1
+    char prev_char = '\0';
+    int prev_count = -1;
+    for (int i = 0; i < n_files; i++) {
+        if (results[i] == NULL) {
+            continue;
+        }
+
+        int buff_size = num_buffer_per_file[i];
+        for (int j = 0; j < buff_size; j++) {
+            if (results[i][j] == NULL) {
+                continue;
+            }
+
+            int count_size = results[i][j]->size;
+            if (count_size == 1) {
+                if (prev_count != -1) {
+                    if (prev_char != results[i][j]->keyword[0]) {
+                        // flush prev
+                        // printf("%d%c\n", prev_count, prev_char);
+                        fwrite(&prev_count, 4, 1, stdout);
+                        fwrite(&prev_char, 1, 1, stdout);
+                        prev_char = results[i][j]->keyword[count_size - 1];
+                        prev_count = results[i][j]->count[count_size - 1];
+                    } else {
+                        prev_count += results[i][j]->count[count_size - 1];
+                    }
+                } else {
+                    prev_char = results[i][j]->keyword[count_size - 1];
+                    prev_count = results[i][j]->count[count_size - 1];
+                }
+            } else {
+                int temp = results[i][j]->count[0];
+                if (prev_count != -1) {
+                    if (prev_char == results[i][j]->keyword[0]) {
+                        // print increment
+                        temp += prev_count;
+                    } else {
+                        // flush prev
+                        // printf("%d%c\n", prev_count, prev_char);
+                        fwrite(&prev_count, 4, 1, stdout);
+                        fwrite(&prev_char, 1, 1, stdout); 
+                    }
+                }
+
+                // printf("%d%c\n", temp, results[i][j]->keyword[0]);
+                fwrite(&temp, 4, 1, stdout);
+                fwrite(&results[i][j]->keyword[0], 1, 1, stdout);
+
+                for(int k = 1; k < count_size - 1; k++) {
+                    // print normal
+                    // printf("%d%c\n", results[i][j]->count[k], results[i][j]->keyword[k]);
+                    fwrite(&results[i][j]->count[k], 4, 1, stdout);
+                    fwrite(&results[i][j]->keyword[k], 1, 1, stdout);
+                }
+                prev_char = results[i][j]->keyword[count_size - 1];
+                prev_count = results[i][j]->count[count_size - 1];
+            }
+        }
+    }
+    if (prev_count != -1) {
+        // flush prev
+        // printf("%d%c\n", prev_count, prev_char);
+        fwrite(&prev_count, 4, 1, stdout);
+        fwrite(&prev_char, 1, 1, stdout);
+    }
 }
 
 // void print() {
