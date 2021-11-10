@@ -2,3 +2,6 @@ pzip
 tests/*
 *.txt
 out/*
+bigDiffFile
+a.out
+bigSameFile
